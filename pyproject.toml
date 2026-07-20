@@ -1,0 +1,10 @@
+[project]
+name = "mujoco-humanoid-retargeting"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "lxml>=6.1.1",
+    "mujoco>=3.10.0",
+    "numpy>=2.4.6",
+    "pillow>=12.3.0",
+]
