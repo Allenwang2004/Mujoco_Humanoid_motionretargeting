@@ -18,10 +18,14 @@ import mujoco
 import numpy as np
 
 
-def execute(mjcf_path, qpos_npz_path, output_path, width, height):
+def execute(mjcf_path, qpos_npz_path, output_path, width, height, azimuth):
     model = mujoco.MjModel.from_xml_path(mjcf_path)
     data = mujoco.MjData(model)
     renderer = mujoco.Renderer(model, height=height, width=width)
+
+    camera = mujoco.MjvCamera()
+    mujoco.mjv_defaultFreeCamera(model, camera)
+    camera.azimuth = azimuth
 
     npz = np.load(qpos_npz_path)
     qpos = npz["qpos"]
@@ -31,7 +35,7 @@ def execute(mjcf_path, qpos_npz_path, output_path, width, height):
         for frame in qpos:
             data.qpos[:] = frame
             mujoco.mj_forward(model, data)
-            renderer.update_scene(data)
+            renderer.update_scene(data, camera=camera)
             writer.append_data(renderer.render())
 
     print(f"Wrote {len(qpos)} frames @ {fps}fps -> {output_path}")
@@ -44,5 +48,12 @@ if __name__ == "__main__":
     parser.add_argument("--output", required=True)
     parser.add_argument("--width", type=int, default=640)
     parser.add_argument("--height", type=int, default=480)
+    parser.add_argument(
+        "--azimuth",
+        type=float,
+        default=-90,
+        help="Camera azimuth in degrees (MuJoCo default free camera is 90; "
+        "this defaults to -90, i.e. rotated 180 deg, to face the model front-on).",
+    )
     args = parser.parse_args()
-    execute(args.mjcf, args.qpos_npz, args.output, args.width, args.height)
+    execute(args.mjcf, args.qpos_npz, args.output, args.width, args.height, args.azimuth)
