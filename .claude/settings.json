@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(which blender *)",
+      "Read(//Applications/**)",
+      "Bash(/Applications/Blender.app/Contents/MacOS/Blender --background --python scripts/build_armature_fbx.py -- --input assets/humanoid_skeleton.json --output assets/humanoid_CMU.fbx)"
+    ]
+  }
+}

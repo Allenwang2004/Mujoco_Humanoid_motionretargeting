@@ -8,6 +8,11 @@ world transform for every body (mj_forward at qpos=0), and only the resulting
 flat world positions/orientations get handed to Blender. This keeps the MJCF
 parsing decoupled from any assumptions about how Blender will build the rig.
 """
+
+"""
+/Applications/Blender.app/Contents/MacOS/Blender --background --python scripts/build_armature_fbx.py -- --input assets/humanoid_skeleton.json --output assets/humanoid_CMU.fbx
+"""
+
 import argparse
 import json
 
@@ -73,7 +78,7 @@ def _mat_to_quat(xmat_flat):
 
 def main():
     parser = argparse.ArgumentParser(description="Dump MJCF rest-pose world transforms to JSON.")
-    parser.add_argument("--input", default="mjcf/humanoid_CMU.xml")
+    parser.add_argument("--input", default="mjcf/humanoid.xml")
     parser.add_argument("--output", default="assets/humanoid_skeleton.json")
     args = parser.parse_args()
     dump_skeleton(args.input, args.output)

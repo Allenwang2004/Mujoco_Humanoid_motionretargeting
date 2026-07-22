@@ -3,8 +3,8 @@ from a humanoid_skeleton.json (produced by export_skeleton_json.py) and export
 it as FBX for import into Unreal Engine.
 
 Run with:
-    blender --background --python scripts/build_armature_fbx.py -- \
-        --input assets/humanoid_skeleton.json --output assets/humanoid_CMU.fbx
+    /Applications/Blender.app/Contents/MacOS/Blender --background --python scripts/build_armature_fbx.py -- \
+        --input assets/humanoid_skeleton.json --output assets/humanoid.fbx
 
 Design notes:
 - MuJoCo and Blender are both Z-up, right-handed, meters -- world positions
@@ -143,6 +143,24 @@ def build_armature(bodies):
         if (bone.tail - bone.head).length < MIN_BONE_LEN:
             bone.tail = bone.head + mathutils.Vector((0, 0, MIN_BONE_LEN))
 
+    # Third pass: leaf bones (head, hands, fingers, toes) have their tail
+    # artificially extrapolated above rather than derived from a real child
+    # bone, so Blender's automatic roll for them is an arbitrary tie-break
+    # rather than a meaningful orientation. That ambiguity doesn't affect
+    # in-engine skeletal mesh display (Unreal recomputes deformation from its
+    # own imported rest pose), but it does make the exported skin bind pose
+    # inconsistent when a *different* tool (Blender itself, re-importing an
+    # FBX round-tripped through Unreal) re-derives the same bone's local
+    # frame -- visibly displacing that bone's mesh. Anchor roll to the body's
+    # own MuJoCo orientation (world_quat_wxyz, already computed by MuJoCo and
+    # otherwise only used for geom placement) so it's deterministic.
+    for name, bone in list(edit_bones.items()):
+        if children_of.get(name):
+            continue  # non-leaf: tail came from a real child, roll is fine as-is
+        w, x, y, z = bodies[name]["world_quat_wxyz"]
+        body_up = mathutils.Quaternion((w, x, y, z)) @ mathutils.Vector((0, 0, 1))
+        bone.align_roll(body_up)
+
     bpy.ops.object.mode_set(mode="OBJECT")
     return armature_obj
 
@@ -153,13 +171,39 @@ def _make_mesh_data(name, gtype, size):
     # directly with bmesh instead.
     bm = bmesh.new()
     if gtype == "mjGEOM_CAPSULE":
+        # A MuJoCo capsule is a cylinder of length 2*half_len capped with a
+        # full hemisphere of `radius` at each end (total length along the
+        # axis is 2*half_len + 2*radius, not just 2*half_len). Building only
+        # the flat-capped cylinder below made every capsule visually shorter
+        # than its true physical extent by `radius` at each end -- barely
+        # noticeable for long thin limb segments (half_len >> radius) but a
+        # large, obvious gap for short/wide segments like the head
+        # (half_len=0.035 vs radius=0.085, i.e. most of its true length is
+        # the hemispherical caps). Add two UV-sphere caps to match; they only
+        # need to look right (this mesh is a visual/skinning proxy, not a
+        # physics shape), so simple overlapping geometry is fine.
         radius, half_len = size[0], size[1]
-        bmesh.ops.create_cone(bm, cap_ends=True, segments=12,
+        bmesh.ops.create_cone(bm, cap_ends=False, segments=12,
                                radius1=radius, radius2=radius, depth=half_len * 2)
+        for sign in (-1, 1):
+            cap = bmesh.new()
+            bmesh.ops.create_uvsphere(cap, u_segments=12, v_segments=8, radius=radius)
+            bmesh.ops.translate(cap, verts=cap.verts, vec=(0, 0, sign * half_len))
+            cap_mesh = bpy.data.meshes.new("__capsule_cap_tmp__")
+            cap.to_mesh(cap_mesh)
+            cap.free()
+            bm.from_mesh(cap_mesh)
+            bpy.data.meshes.remove(cap_mesh)
     elif gtype == "mjGEOM_SPHERE":
         bmesh.ops.create_uvsphere(bm, u_segments=12, v_segments=8, radius=size[0])
     elif gtype == "mjGEOM_ELLIPSOID":
         bmesh.ops.create_uvsphere(bm, u_segments=12, v_segments=8, radius=1.0)
+    elif gtype == "mjGEOM_BOX":
+        # create_cube(size=2.0) spans -1..1 on each axis; MuJoCo's box `size`
+        # is half-extents, so scaling by `size` directly gives a box spanning
+        # -size[i]..+size[i], matching MuJoCo's semantics.
+        bmesh.ops.create_cube(bm, size=2.0)
+        bmesh.ops.scale(bm, verts=bm.verts, vec=(size[0], size[1], size[2]))
     else:
         bm.free()
         return None
@@ -177,7 +221,7 @@ def add_geom_meshes(armature_obj, bodies, geoms):
             continue
         gtype = geom["type"]
         size = geom["size"]
-        if gtype not in ("mjGEOM_CAPSULE", "mjGEOM_SPHERE", "mjGEOM_ELLIPSOID"):
+        if gtype not in ("mjGEOM_CAPSULE", "mjGEOM_SPHERE", "mjGEOM_ELLIPSOID", "mjGEOM_BOX"):
             continue
 
         mesh = _make_mesh_data(f"geom_{geom['name']}", gtype, size)

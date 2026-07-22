@@ -3,8 +3,18 @@ name = "mujoco-humanoid-retargeting"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+    "imageio[ffmpeg]>=2.37.4",
     "lxml>=6.1.1",
     "mujoco>=3.10.0",
     "numpy>=2.4.6",
     "pillow>=12.3.0",
+]
+
+[project.optional-dependencies]
+# Only needed on the (remote, GPU) machine running notebooks/motivo_xml_swap.ipynb.
+motivo = [
+    "metamotivo[huggingface,humenv] @ git+https://github.com/facebookresearch/metamotivo.git",
+    "h5py>=3.11",
+    "jupyterlab>=4.2",
+    "mediapy>=1.2",
 ]
