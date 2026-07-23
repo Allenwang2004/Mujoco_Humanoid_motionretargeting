@@ -143,40 +143,36 @@ If you want to play the retargeted motion back *inside MuJoCo itself*
 into a `(nframes, nq)` qpos array. This is a separate, two-stage tool in the
 `mujoco_humanoid_retargeting` repo — see that repo's `scripts/` directory.
 
-**Stage 1 (Blender): extract per-frame world pose.** Run once for the
-retargeted clip, and once (ever, reusable across all clips) for the static
-T-pose armature — the T-pose extraction measures each bone's fixed
+**Stage 1 (Blender): extract per-frame world pose.** Batch-processes every
+clip in `<folder>/fbx/`, plus once (reusable across all clips) for the
+static T-pose armature — the T-pose extraction measures each bone's fixed
 Blender-vs-MuJoCo orientation offset, needed to correct stage 2's output.
+Writes `<folder>/fbx_pose/<clip>/{pose.json,tpose.json}` for each clip.
 
 ```bash
 /Applications/Blender.app/Contents/MacOS/Blender --background --python /Users/coconut/mujoco_humanoid_retargeting/scripts/extract_fbx_pose.py -- \
-  --fbx /Users/coconut/mujoco_humanoid_retargeting/fbx/humanoid_CMU+Female_LiftBox_subj_Anim.fbx \
-  --output /Users/coconut/mujoco_humanoid_retargeting/fbx/output/pose.json
-
-/Applications/Blender.app/Contents/MacOS/Blender --background --python /Users/coconut/mujoco_humanoid_retargeting/scripts/extract_fbx_pose.py -- \
-  --fbx /Users/coconut/mujoco_humanoid_retargeting/assets/humanoid_CMU/humanoid_CMU.fbx \
-  --output /Users/coconut/mujoco_humanoid_retargeting/fbx/output/tpose.json
+  --folder /Users/coconut/mujoco_humanoid_retargeting/robot \
+  --tpose-fbx /Users/coconut/mujoco_humanoid_retargeting/assets/robot/robot.fbx
 ```
 
-**Stage 2 (MuJoCo venv): assemble qpos.**
+**Stage 2 (MuJoCo venv): assemble qpos.** Batch-processes every clip folder
+from stage 1, writing `<folder>/qpos/<clip>.npz`.
 
 ```bash
-uv run scripts/fbx_pose_to_qpos.py \                                         
-  --mjcf mjcf/humanoid_CMU.xml \
-  --skeleton-json assets/humanoid_CMU/humanoid_CMU_skeltion.json \
-  --pose-json fbx/output/pose.json \ 
-  --tpose-json fbx/output/tpose.json \ 
-  --output fbx/output/humanoid_CMU+Female_LiftBox_subj_qpos.npz 
+uv run scripts/fbx_pose_to_qpos.py \
+  --mjcf mjcf/robot.xml \
+  --skeleton-json assets/robot/robot.json \
+  --folder /Users/coconut/mujoco_humanoid_retargeting/robot
 ```
 
 **Verify** (kinematic playback, no physics — just confirms the conversion
 looks right before attempting real simulation):
 
 ```bash
-python3 scripts/render_qpos.py \
-  --mjcf mjcf/humanoid_CMU.xml \
-  --qpos-npz output/qpos/humanoid_CMU+Female_LiftBox_subj_qpos.npz \
-  --output fbx/output/humanoid_CMU+Female_LiftBox_subj_qpos_playback.mp4
+uv run scripts/render_qpos.py \
+  --mjcf mjcf/robot.xml \
+  --qpos-npz robot/qpos/robot+A1_-_Stand_stageii_Anim.npz \
+  --output render/test.mp4
 ```
 
 This is pure `mj_forward` per frame — not a physics rollout. To actually

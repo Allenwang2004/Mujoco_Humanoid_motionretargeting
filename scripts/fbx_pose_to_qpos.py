@@ -33,15 +33,19 @@ contributed in the source motion ends up folded into their resolved child's
 joint instead (this is the same approximation the armature-building step
 already makes, just made visible here).
 
+Batch-processes every clip folder produced by stage 1 (`extract_fbx_pose.py`):
+for each `<folder>/fbx_pose/<clip>/{pose.json,tpose.json}`, writes
+`<folder>/qpos/<clip>.npz`.
+
 Run with (this repo's own venv, NOT inside Blender):
     python3 scripts/fbx_pose_to_qpos.py \
         --mjcf mjcf/humanoid_CMU.xml \
         --skeleton-json assets/humanoid_skeleton.json \
-        --pose-json <stage1_output.json> \
-        --output <out.npz>
+        --folder <folder>
 """
 import argparse
 import json
+from pathlib import Path
 
 import mujoco
 import numpy as np
@@ -91,6 +95,14 @@ def decompose_zx(R):
     return a, c
 
 
+def decompose_xyz(R):
+    """R = Rx(a) @ Ry(b) @ Rz(c); returns (a, b, c)."""
+    b = np.arcsin(np.clip(R[0, 2], -1.0, 1.0))
+    a = np.arctan2(-R[1, 2], R[2, 2])
+    c = np.arctan2(-R[0, 1], R[0, 0])
+    return a, b, c
+
+
 def single_axis_twist(q, axis):
     """Angle of rotation about `axis` embedded in quaternion q (discards any
     perpendicular swing component).
@@ -113,7 +125,8 @@ AXIS_LETTER = {(0.0, 0.0, 1.0): "z", (0.0, 1.0, 0.0): "y", (1.0, 0.0, 0.0): "x"}
 
 def decompose_for_axes(delta_quat, axes):
     """axes: list of axis tuples in declaration order. Returns angles in the
-    same order, for the patterns that actually occur in humanoid_CMU.xml."""
+    same order, for the patterns that actually occur in humanoid_CMU.xml /
+    robot.xml."""
     letters = tuple(AXIS_LETTER[tuple(a)] for a in axes)
     R = quat_to_matrix(delta_quat)
     if letters == ("z", "y", "x"):
@@ -123,6 +136,8 @@ def decompose_for_axes(delta_quat, axes):
         return [a, b]
     if letters == ("z", "x"):
         return list(decompose_zx(R))
+    if letters == ("x", "y", "z"):
+        return list(decompose_xyz(R))
     if letters == ("x",):
         return [single_axis_twist(delta_quat, np.array([1.0, 0.0, 0.0]))]
     if letters == ("y",):
@@ -207,10 +222,7 @@ def body_joints(model, name):
     return joints
 
 
-def execute(mjcf_path, skeleton_json_path, pose_json_path, tpose_json_path, output_path):
-    model = mujoco.MjModel.from_xml_path(mjcf_path)
-    bodies = load_bodies(skeleton_json_path)
-
+def convert_clip(model, bodies, pose_json_path, tpose_json_path, output_path):
     with open(pose_json_path) as f:
         pose_data = json.load(f)
     frames = pose_data["frames"]
@@ -286,17 +298,33 @@ def execute(mjcf_path, skeleton_json_path, pose_json_path, tpose_json_path, outp
     print(f"Wrote qpos array {qpos.shape} (nq={model.nq}) -> {output_path}")
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mjcf", required=True)
     parser.add_argument("--skeleton-json", required=True,
                          help="Original rest-pose JSON from export_skeleton_json.py")
-    parser.add_argument("--pose-json", required=True,
-                         help="Stage-1 output (extract_fbx_pose.py) for the retargeted animation FBX")
-    parser.add_argument("--tpose-json", required=True,
-                         help="Stage-1 output (extract_fbx_pose.py) for the unanimated armature FBX "
-                              "(e.g. assets/humanoid_CMU.fbx) -- used to measure each bone's fixed "
-                              "Blender-vs-MuJoCo orientation offset")
-    parser.add_argument("--output", required=True)
+    parser.add_argument("--folder", required=True,
+                         help="Directory containing an fbx_pose/ subfolder (stage-1 output "
+                              "from extract_fbx_pose.py), one <clip>/{pose.json,tpose.json} "
+                              "per clip. Output is written to <folder>/qpos/<clip>.npz")
     args = parser.parse_args()
-    execute(args.mjcf, args.skeleton_json, args.pose_json, args.tpose_json, args.output)
+
+    pose_dir = Path(args.folder) / "fbx_pose"
+    out_dir = Path(args.folder) / "qpos"
+    clip_dirs = sorted(p for p in pose_dir.iterdir() if p.is_dir())
+    if not clip_dirs:
+        print(f"No clip folders found in {pose_dir}")
+        return
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    model = mujoco.MjModel.from_xml_path(args.mjcf)
+    bodies = load_bodies(args.skeleton_json)
+
+    for clip_dir in clip_dirs:
+        convert_clip(model, bodies,
+                     clip_dir / "pose.json", clip_dir / "tpose.json",
+                     out_dir / f"{clip_dir.name}.npz")
+
+
+if __name__ == "__main__":
+    main()

@@ -12,6 +12,7 @@ Run with (this repo's own venv):
         --output renders/humanoid_CMU+Female_LiftBox_subj_qpos_playback.mp4
 """
 import argparse
+from pathlib import Path
 
 import imageio.v2 as imageio
 import mujoco
@@ -24,8 +25,18 @@ def execute(mjcf_path, qpos_npz_path, output_path, width, height, azimuth):
     renderer = mujoco.Renderer(model, height=height, width=width)
 
     camera = mujoco.MjvCamera()
-    mujoco.mjv_defaultFreeCamera(model, camera)
-    camera.azimuth = azimuth
+    if Path(mjcf_path).stem == "robot":
+        # robot.xml has no <statistic> extent, so the default free camera
+        # auto-scales to its 100x100 floor plane and renders the robot as a
+        # speck. Frame it manually instead of touching the model file (see
+        # render_check.py).
+        camera.lookat = [0, -0.2, 0.9]
+        camera.distance = 3.0
+        camera.azimuth = 90
+        camera.elevation = -10
+    else:
+        mujoco.mjv_defaultFreeCamera(model, camera)
+        camera.azimuth = azimuth
 
     npz = np.load(qpos_npz_path)
     qpos = npz["qpos"]
