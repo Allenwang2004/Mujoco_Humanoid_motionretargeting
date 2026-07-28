@@ -26,9 +26,9 @@ import argparse
 import json
 import sys
 
-import bmesh
-import bpy
-import mathutils
+import bmesh #type: ignore
+import bpy #type: ignore
+import mathutils #type: ignore
 
 # MuJoCo's world_pos/geom sizes are in meters; Blender's FBX exporter leaves
 # this m -> cm conversion as a residual scale=100 on the imported bind pose
