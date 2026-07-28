@@ -4,8 +4,9 @@ Takes:
   - stage-1 output from `extract_fbx_pose.py` (per-frame world pos/quat of
     every bone in the retargeted animation, in Blender/MuJoCo's shared
     Z-up right-handed convention),
-  - the ORIGINAL rest-pose `humanoid_skeleton.json` (from
-    `export_skeleton_json.py`, i.e. the qpos=0 world pos/quat of every body),
+  - the ORIGINAL rest-pose skeleton JSON (from `export_skeleton_json.py`,
+    i.e. the qpos=0 world pos/quat of every body -- `assets/robot/robot.json`
+    by default),
   - the MJCF the skeleton came from (to query each body's actual joints:
     how many DOFs, which axes, in which order, and where in `qpos` they go).
 
@@ -25,23 +26,26 @@ joint axes/order to get each hinge's angle.
 The root uses a free joint: qpos[0:3]/[3:7] are just its world position
 (already in meters) and world quaternion directly, no delta needed.
 
-Known approximation: a handful of bodies (e.g. `lowerback`) have zero
-position offset from their parent in the MJCF and so were merged away in
-`build_armature_fbx.py` -- they have no bone of their own to read a pose
-from. Their own joint angles are left at 0; whatever rotation they
-contributed in the source motion ends up folded into their resolved child's
-joint instead (this is the same approximation the armature-building step
-already makes, just made visible here).
+Known approximation (doesn't currently trigger for `robot.xml`, whose 23
+posed bodies all have nonzero offsets from their parent, but kept in case a
+future skeleton does): any body with zero position offset from its parent in
+the MJCF gets merged away in `build_armature_fbx.py` and has no bone of its
+own to read a pose from. Its own joint angles are left at 0; whatever
+rotation it contributed in the source motion ends up folded into its
+resolved child's joint instead (this is the same approximation the
+armature-building step already makes, just made visible here).
 
 Batch-processes every clip folder produced by stage 1 (`extract_fbx_pose.py`):
 for each `<folder>/fbx_pose/<clip>/{pose.json,tpose.json}`, writes
 `<folder>/qpos/<clip>.npz`.
 
+Targets the MetaMotivo `robot.xml` pipeline: defaults to `mjcf/robot.xml` and
+`assets/robot/robot.json` (from `export_skeleton_json.py --input mjcf/robot.xml
+--output assets/robot/robot.json`), so 7 free-joint values + 23 bodies x 3
+hinge DOFs (x,y,z order) = nq 76.
+
 Run with (this repo's own venv, NOT inside Blender):
-    python3 scripts/fbx_pose_to_qpos.py \
-        --mjcf mjcf/humanoid_CMU.xml \
-        --skeleton-json assets/humanoid_skeleton.json \
-        --folder <folder>
+    python3 scripts/fbx_pose_to_qpos.py --folder <folder>
 """
 import argparse
 import json
@@ -300,8 +304,8 @@ def convert_clip(model, bodies, pose_json_path, tpose_json_path, output_path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mjcf", required=True)
-    parser.add_argument("--skeleton-json", required=True,
+    parser.add_argument("--mjcf", default="mjcf/robot.xml")
+    parser.add_argument("--skeleton-json", default="assets/robot/robot.json",
                          help="Original rest-pose JSON from export_skeleton_json.py")
     parser.add_argument("--folder", required=True,
                          help="Directory containing an fbx_pose/ subfolder (stage-1 output "
