@@ -105,7 +105,16 @@ def build_armature(bodies):
         bone.head = head
         if parent_bone_name is not None:
             bone.parent = edit_bones[parent_bone_name]
-            bone.use_connect = True
+            # use_connect is a live constraint, not a one-time snap: as long
+            # as it's True, this bone's head is FORCED to always equal its
+            # parent's tail, even overriding the explicit `bone.head = head`
+            # above once the parent's tail is set in the second pass below.
+            # A parent's tail can only point at ONE location, so this is
+            # only correct for the one child the tail-assignment pass below
+            # actually points at (children_of[parent][0]) -- connecting any
+            # additional sibling silently collapses it onto that same point,
+            # discarding its own (correct) head position.
+            bone.use_connect = children_of.get(parent_bone_name, [None])[0] == name
         bone_name_for_body[name] = name
         return bone
 

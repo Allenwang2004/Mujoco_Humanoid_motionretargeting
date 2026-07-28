@@ -1,6 +1,0 @@
-WARNING Wed Jul 22 11:51:24 2026: Read error while reading 'mjcf'
-
-WARNING Wed Jul 22 11:51:29 2026: Read error while reading 'mjcf/'
-
-WARNING Wed Jul 22 11:51:33 2026: Read error while reading 'mjcf/'
-
