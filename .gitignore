@@ -1,4 +1,6 @@
 __pycache__/
 *.pyc
 .venv/
-/robot
+/fbx
+/robot/fbx
+/robot/fbx_pose
