@@ -1,18 +1,3 @@
-"""Dump the rest-pose (qpos=0) world-space transform of every body in a MJCF
-humanoid, plus its geoms, to a plain JSON file.
-
-Building the corresponding Blender armature from raw MJCF <body pos>/<quat>
-chains would mean re-implementing MuJoCo's quaternion composition/normalization
-rules by hand. Instead we let MuJoCo itself compute the authoritative rest-pose
-world transform for every body (mj_forward at qpos=0), and only the resulting
-flat world positions/orientations get handed to Blender. This keeps the MJCF
-parsing decoupled from any assumptions about how Blender will build the rig.
-"""
-
-"""
-/Applications/Blender.app/Contents/MacOS/Blender --background --python scripts/build_armature_fbx.py -- --input assets/humanoid_skeleton.json --output assets/humanoid_CMU.fbx
-"""
-
 import argparse
 import json
 
